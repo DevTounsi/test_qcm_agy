@@ -84,9 +84,19 @@ SYSTEM_MULTI = (
     "sinon la phrase exacte de la bonne réponse). Aucune autre ligne, aucun préfixe, aucun Markdown."
 )
 
+SYSTEM_IMAGE = (
+    "Tu es un moteur QCM silencieux. Utilise uniquement ton outil de lecture pour lire le fichier image indiqué, "
+    "puis n'explique rien.\n"
+    "- S'il y a UNE seule question : si les choix ont des lettres (A/B/C/D, a/b/c/d), "
+    "réponds UNIQUEMENT par la lettre majuscule ; sinon, réponds UNIQUEMENT par la phrase exacte de la bonne réponse.\n"
+    "- S'il y a PLUSIEURS questions numérotées, réponds sur des lignes au format exact `NUMERO: REPONSE`.\n"
+    "Aucun préfixe, aucune explication, aucun Markdown."
+)
+
 # --- Lecture du presse-papiers Windows sans dépendance externe ---
 _user32 = ctypes.WinDLL("user32", use_last_error=True)
 _kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+_CF_DIB = 8
 _CF_UNICODETEXT = 13
 
 _user32.OpenClipboard.argtypes = [wintypes.HWND]
@@ -129,6 +139,28 @@ def lire_presse_papiers() -> str | None:
             _kernel32.GlobalUnlock(handle)
     finally:
         _user32.CloseClipboard()
+
+
+def lire_image_presse_papiers() -> str | None:
+    """Sauvegarde l'image du presse-papiers en PNG temporaire et retourne son chemin."""
+    if not _user32.IsClipboardFormatAvailable(_CF_DIB):
+        return None
+    try:
+        from PIL import ImageGrab
+    except ImportError:
+        return None
+    try:
+        img = ImageGrab.grabclipboard()
+    except OSError:
+        return None
+    if img is None or not hasattr(img, "save"):
+        return None
+
+    dossier = Path(tempfile.gettempdir()) / "qcm_clip_imgs"
+    dossier.mkdir(parents=True, exist_ok=True)
+    chemin = dossier / f"clip_{time.time_ns()}.png"
+    img.save(chemin, format="PNG")
+    return str(chemin)
 
 
 def detecter_lettres(question: str) -> bool:
@@ -317,23 +349,19 @@ def ouvrir_connexion_agy() -> tuple[bool, str]:
         return False, f"Impossible d'ouvrir agy : {err}"
 
 
-def interroger_agy(question: str, model: str = MODEL, effort: str | None = None) -> str:
-    """Envoie la question à agy en mode non-interactif et retourne uniquement la réponse."""
+def _executer_agy(
+    prompt: str,
+    model: str = MODEL,
+    effort: str | None = None,
+    timeout: int = TIMEOUT_SECONDS,
+    extra_args: list[str] | None = None,
+    cwd: str | None = None,
+) -> tuple[bool, str]:
+    """Exécute `agy -p` et retourne (succès, réponse_brute_ou_erreur)."""
     agy_bin = _trouver_agy()
     if not agy_bin:
-        return "[erreur] agy introuvable. Installe Antigravity CLI (agy)."
+        return False, "[erreur] agy introuvable. Installe Antigravity CLI (agy)."
 
-    numeros = extraire_numeros_questions(question)
-    est_multi = len(numeros) >= 2
-    avec_lettres = False if est_multi else detecter_lettres(question)
-    if est_multi:
-        systeme = SYSTEM_MULTI
-        timeout = min(120, max(TIMEOUT_SECONDS, 15 + 3 * len(numeros)))
-    else:
-        systeme = SYSTEM_LETTRE if avec_lettres else SYSTEM_PHRASE
-        timeout = TIMEOUT_SECONDS
-
-    prompt = f"{systeme}\n\nQuestion :\n{question.strip()}"
     cmd = [
         agy_bin,
         "-p",
@@ -346,6 +374,8 @@ def interroger_agy(question: str, model: str = MODEL, effort: str | None = None)
     ]
     if effort and effort.lower() != "auto" and not model.lower().endswith(_EFFORT_SUFFIXES):
         cmd.extend(["--effort", effort.lower()])
+    if extra_args:
+        cmd.extend(extra_args)
 
     try:
         proc = subprocess.run(
@@ -356,27 +386,82 @@ def interroger_agy(question: str, model: str = MODEL, effort: str | None = None)
             encoding="utf-8",
             errors="replace",
             timeout=timeout,
-            cwd=tempfile.gettempdir(),
+            cwd=cwd or tempfile.gettempdir(),
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
     except subprocess.TimeoutExpired:
-        return "[erreur] Délai dépassé."
+        return False, "[erreur] Délai dépassé."
     except OSError as err:
-        return f"[erreur] {err}"
+        return False, f"[erreur] {err}"
 
     if proc.returncode != 0:
         detail = (proc.stderr or proc.stdout or "").strip()
         if any(mot in detail.lower() for mot in ("auth", "login", "credential", "sign in", "token")):
-            return "[erreur] Non connecté. Clique sur 'Compte' pour te connecter avec Google."
-        return f"[erreur agy] {detail}"
+            return False, "[erreur] Non connecté. Clique sur 'Compte' pour te connecter avec Google."
+        return False, f"[erreur agy] {detail}"
 
     try:
         payload = json.loads(proc.stdout)
-        brut = payload.get("response", "")
+        return True, payload.get("response", "")
     except json.JSONDecodeError:
-        brut = proc.stdout
+        return True, proc.stdout
+
+
+def interroger_agy(question: str, model: str = MODEL, effort: str | None = None) -> str:
+    """Envoie la question à agy en mode non-interactif et retourne uniquement la réponse."""
+    numeros = extraire_numeros_questions(question)
+    est_multi = len(numeros) >= 2
+    avec_lettres = False if est_multi else detecter_lettres(question)
+    if est_multi:
+        systeme = SYSTEM_MULTI
+        timeout = min(120, max(TIMEOUT_SECONDS, 15 + 3 * len(numeros)))
+    else:
+        systeme = SYSTEM_LETTRE if avec_lettres else SYSTEM_PHRASE
+        timeout = TIMEOUT_SECONDS
+
+    ok, brut = _executer_agy(
+        f"{systeme}\n\nQuestion :\n{question.strip()}",
+        model=model,
+        effort=effort,
+        timeout=timeout,
+    )
+    if not ok:
+        return brut
 
     propre = nettoyer_reponse_multi(brut) if est_multi else nettoyer_reponse(brut, lettre_seule=avec_lettres)
+    return propre or "[erreur] Réponse vide."
+
+
+def interroger_agy_image(image_path: str, model: str = MODEL, effort: str | None = None) -> str:
+    """Envoie une capture PNG à agy en vision multimodale et supprime le fichier temporaire."""
+    chemin = Path(image_path)
+    dossier = str(chemin.parent)
+    try:
+        ok, brut = _executer_agy(
+            f"{SYSTEM_IMAGE}\n\nFichier image à analyser : {chemin}",
+            model=model,
+            effort=effort,
+            timeout=max(TIMEOUT_SECONDS, 60),
+            extra_args=["--dangerously-skip-permissions", "--add-dir", dossier],
+            cwd=dossier,
+        )
+    finally:
+        chemin.unlink(missing_ok=True)
+
+    if not ok:
+        return brut
+
+    texte = re.sub(r"<think>.*?</think>", "", brut, flags=re.DOTALL).strip()
+    lignes_multi = [
+        l for l in texte.splitlines()
+        if re.match(r"^(?:Question\s+|Q\s*)?\d+\s*[:\.\-\)]\s*.+$", l.strip(), flags=re.IGNORECASE)
+    ]
+    if len(lignes_multi) >= 2:
+        propre = nettoyer_reponse_multi(texte)
+    elif re.match(r"^[\(\[]?[A-Ha-h][\)\.\]]?$", texte.strip()):
+        propre = nettoyer_reponse(texte, lettre_seule=True)
+    else:
+        propre = nettoyer_reponse(texte, lettre_seule=False)
     return propre or "[erreur] Réponse vide."
 
 

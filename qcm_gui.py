@@ -30,6 +30,7 @@ class QcmApp:
         model: str | None = None,
         lire_fn=None,
         seq_fn=None,
+        lire_image_fn=None,
     ) -> None:
         self.root = root
         cfg = qcm.charger_config()
@@ -43,6 +44,9 @@ class QcmApp:
 
         self._utilise_clipboard_systeme = lire_fn is None
         self.lire_fn = lire_fn or qcm.lire_presse_papiers
+        self.lire_image_fn = lire_image_fn if lire_image_fn is not None else (
+            qcm.lire_image_presse_papiers if self._utilise_clipboard_systeme else (lambda: None)
+        )
         self.seq_fn = seq_fn if seq_fn is not None else (
             qcm.numero_sequence_presse_papiers if self._utilise_clipboard_systeme else None
         )
@@ -54,7 +58,7 @@ class QcmApp:
         self.dernier_texte = (self.lire_fn() or "").strip()
         self.dernier_seq = self.seq_fn() if self.seq_fn else None
 
-        self.task_queue: queue.Queue[tuple[int, str]] = queue.Queue()
+        self.task_queue: queue.Queue[tuple[str, int, str]] = queue.Queue()
         self.ui_queue: queue.Queue[tuple] = queue.Queue()
         self.stop_event = threading.Event()
 
@@ -193,7 +197,7 @@ class QcmApp:
         msg_initial = (
             "Installe agy puis clique sur Compte"
             if not qcm._trouver_agy()
-            else "En attente d'un Ctrl+C…"
+            else "En attente d'un Ctrl+C ou Win+Shift+S…"
         )
         self.reponse_var = tk.StringVar(value=msg_initial)
         self.reponse_lbl = tk.Label(
@@ -265,7 +269,7 @@ class QcmApp:
     def vider(self) -> None:
         self.compteur = 0
         self.derniere_duree = None
-        self.reponse_var.set("En attente d'un Ctrl+C…")
+        self.reponse_var.set("En attente d'un Ctrl+C ou Win+Shift+S…")
         self.reponse_lbl.configure(fg=MUTED, font=self.font_petit)
         self.historique.configure(state="normal")
         self.historique.delete("1.0", "end")
@@ -287,7 +291,7 @@ class QcmApp:
             if self.derniere_duree is not None:
                 self.status_var.set(f"Prêt ({self.derniere_duree:.2f}s)")
             else:
-                self.status_var.set("Prêt — copie une question")
+                self.status_var.set("Prêt — Ctrl+C ou Win+Shift+S")
 
     def _lire_texte_securise(self) -> str | None:
         actuel = self.lire_fn()
@@ -301,19 +305,33 @@ class QcmApp:
     def _enfiler_question(self, propre: str) -> None:
         self.dernier_texte = propre
         self.compteur += 1
-        self.task_queue.put((self.compteur, propre))
+        self.task_queue.put(("text", self.compteur, propre))
         self._maj_statut()
 
-    def analyser_maintenant(self) -> None:
+    def _enfiler_image(self, chemin_image: str) -> None:
+        self.compteur += 1
+        self.task_queue.put(("image", self.compteur, chemin_image))
+        self._maj_statut()
+
+    def _traiter_presse_papiers_courant(self) -> bool:
+        """Lit le texte ou l'image du presse-papiers et l'enfile. Retourne False si verrouillé."""
         actuel = self._lire_texte_securise()
-        if not actuel:
-            return
+        if actuel is None:
+            return False
         propre = actuel.strip()
-        if len(propre) < qcm.MIN_TEXT_LENGTH:
-            return
+        if propre and len(propre) >= qcm.MIN_TEXT_LENGTH:
+            self._enfiler_question(propre)
+            return True
+        img_path = self.lire_image_fn()
+        if img_path:
+            self._enfiler_image(img_path)
+            return True
+        return True
+
+    def analyser_maintenant(self) -> None:
         if self.seq_fn:
             self.dernier_seq = self.seq_fn()
-        self._enfiler_question(propre)
+        self._traiter_presse_papiers_courant()
 
     def _verifier_presse_papiers(self) -> None:
         if self.stop_event.is_set():
@@ -322,12 +340,8 @@ class QcmApp:
             if self.seq_fn is not None:
                 seq = self.seq_fn()
                 if seq != self.dernier_seq:
-                    actuel = self._lire_texte_securise()
-                    if actuel is not None:
+                    if self._traiter_presse_papiers_courant():
                         self.dernier_seq = seq
-                        propre = actuel.strip()
-                        if propre and len(propre) >= qcm.MIN_TEXT_LENGTH:
-                            self._enfiler_question(propre)
             else:
                 actuel = self._lire_texte_securise()
                 if actuel is not None:
@@ -383,7 +397,7 @@ class QcmApp:
     def _boucle_travailleur(self) -> None:
         while not self.stop_event.is_set():
             try:
-                idx, question = self.task_queue.get(timeout=0.15)
+                kind, idx, contenu = self.task_queue.get(timeout=0.15)
             except queue.Empty:
                 continue
             try:
@@ -392,7 +406,10 @@ class QcmApp:
                 self.ui_queue.put(("debut", idx))
                 debut = time.monotonic()
                 try:
-                    reponse = qcm.interroger_agy(question, model=modele_actif, effort=effort_actif)
+                    if kind == "image":
+                        reponse = qcm.interroger_agy_image(contenu, model=modele_actif, effort=effort_actif)
+                    else:
+                        reponse = qcm.interroger_agy(contenu, model=modele_actif, effort=effort_actif)
                 except Exception as exc:
                     reponse = f"[erreur] {exc}"
                 duree = time.monotonic() - debut

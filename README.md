@@ -4,11 +4,12 @@ Mini fenêtre flottante discrète pour Windows qui surveille le presse-papiers e
 
 ## Fonctionnalités
 
-- **Surveillance automatique du presse-papiers** (`Ctrl+C` détecté par numéro de séquence Windows, avec file d'attente FIFO stricte).
+- **Surveillance automatique du presse-papiers** (`Ctrl+C` texte **et** capture d'écran `Win + Shift + S`, avec file d'attente FIFO stricte et affichage du temps d'exécution).
 - **Détection automatique du format** :
   - Choix avec lettres (`A/B/C/D`, `a./b./c./d.`) → renvoie **uniquement la lettre majuscule**.
   - Choix sans lettres → renvoie **uniquement la phrase exacte** de la bonne réponse.
   - Bloc multi-questions (`Question 12 ... Question 13 ...`) → renvoie **`NUMERO: REPONSE`** pour chaque question.
+  - Capture d'écran (`Win + Shift + S`) → analyse directement l'image via la vision multimodale d'`agy`.
 - **Sélecteur de modèle et d'effort** directement dans l'interface (chargés depuis `agy models` et mémorisés dans `~/.qcm_agy_config.json`).
 - **Connexion Google par utilisateur** via le bouton **`Compte`** qui ouvre `agy`.
 
@@ -24,7 +25,7 @@ Mini fenêtre flottante discrète pour Windows qui surveille le presse-papiers e
 1. Télécharge **`qcm.exe`** depuis la page **Releases** du dépôt GitHub.
 2. Double-clique sur **`qcm.exe`**.
 3. Choisis ton **Modèle** et ton **Effort** (ex. `Gemini 4 Hydrogen` + `Medium`, ou `Gemini 3.8 Flash` + `Low`).
-4. Copie (`Ctrl+C`) une question (ou plusieurs d'un coup) : la réponse apparaît automatiquement.
+4. Copie (`Ctrl+C`) une question ou fais une capture (`Win + Shift + S`) : la réponse apparaît automatiquement.
    - **`Top`** : garde la fenêtre au-dessus des autres.
    - **`Lire`** (`Entrée` / `F5`) : analyse ce qui est déjà dans le presse-papiers.
    - **`Pause`** / **`Vider`** / **`Compte`** : mettre en pause, effacer l'historique, ou ouvrir la connexion Google `agy`.
@@ -44,7 +45,7 @@ python qcm.py
 ## Compiler `qcm.exe` localement
 
 ```powershell
-pip install pyinstaller
+pip install -r requirements.txt
 python -m PyInstaller --noconfirm --onefile --windowed --name qcm --distpath . qcm_gui.py
 ```
 
