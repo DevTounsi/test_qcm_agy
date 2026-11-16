@@ -2,6 +2,7 @@
 
 import queue
 import threading
+import time
 import tkinter as tk
 from tkinter import font as tkfont
 from tkinter import ttk
@@ -49,6 +50,7 @@ class QcmApp:
         self.toujours_devant = True
         self.compteur = 0
         self.en_cours = False
+        self.derniere_duree: float | None = None
         self.dernier_texte = (self.lire_fn() or "").strip()
         self.dernier_seq = self.seq_fn() if self.seq_fn else None
 
@@ -262,11 +264,13 @@ class QcmApp:
 
     def vider(self) -> None:
         self.compteur = 0
+        self.derniere_duree = None
         self.reponse_var.set("En attente d'un Ctrl+C…")
         self.reponse_lbl.configure(fg=MUTED, font=self.font_petit)
         self.historique.configure(state="normal")
         self.historique.delete("1.0", "end")
         self.historique.configure(state="disabled")
+        self._maj_statut()
 
     def _maj_statut(self) -> None:
         en_attente = self.task_queue.qsize()
@@ -280,7 +284,10 @@ class QcmApp:
             self.status_var.set("En pause")
         else:
             self.dot.configure(fg=GREEN)
-            self.status_var.set("Prêt — copie une question")
+            if self.derniere_duree is not None:
+                self.status_var.set(f"Prêt ({self.derniere_duree:.2f}s)")
+            else:
+                self.status_var.set("Prêt — copie une question")
 
     def _lire_texte_securise(self) -> str | None:
         actuel = self.lire_fn()
@@ -383,11 +390,13 @@ class QcmApp:
                 modele_actif = self.model
                 effort_actif = self.effort
                 self.ui_queue.put(("debut", idx))
+                debut = time.monotonic()
                 try:
                     reponse = qcm.interroger_agy(question, model=modele_actif, effort=effort_actif)
                 except Exception as exc:
                     reponse = f"[erreur] {exc}"
-                self.ui_queue.put(("fin", idx, reponse))
+                duree = time.monotonic() - debut
+                self.ui_queue.put(("fin", idx, reponse, duree))
             finally:
                 self.task_queue.task_done()
 
@@ -404,16 +413,17 @@ class QcmApp:
                 self.en_cours = True
                 self._maj_statut()
             elif msg[0] == "fin":
-                _, idx, reponse = msg
+                _, idx, reponse, duree = msg
                 self.en_cours = False
-                self._afficher_reponse(idx, reponse)
+                self.derniere_duree = duree
+                self._afficher_reponse(idx, reponse, duree)
                 self._maj_statut()
             elif msg[0] == "catalogue":
                 self._appliquer_catalogue(msg[1])
 
         self.root.after(80, self._traiter_retours_ui)
 
-    def _afficher_reponse(self, idx: int, reponse: str) -> None:
+    def _afficher_reponse(self, idx: int, reponse: str, duree: float) -> None:
         est_erreur = reponse.startswith("[erreur")
         est_multi = "\n" in reponse and not est_erreur
 
@@ -423,7 +433,7 @@ class QcmApp:
         elif est_multi:
             lignes = [l for l in reponse.splitlines() if l.strip()]
             self.reponse_lbl.configure(fg=GREEN, font=self.font_moyen)
-            self.reponse_var.set(f"{len(lignes)} réponses prêtes")
+            self.reponse_var.set(f"{len(lignes)} réponses prêtes ({duree:.2f}s)")
         else:
             police = self.font_grand if len(reponse) <= 4 else self.font_moyen
             self.reponse_lbl.configure(fg=FG, font=police)
@@ -432,17 +442,20 @@ class QcmApp:
         self.historique.configure(state="normal")
         if est_multi:
             debut_bloc = self.historique.index("end-1c")
-            for ligne in reponse.splitlines():
+            lignes = [l for l in reponse.splitlines() if l.strip()]
+            self.historique.insert("end", f"— {len(lignes)} réponses ({duree:.2f}s) —\n", "num")
+            for ligne in lignes:
                 if ":" in ligne:
                     num, rep = ligne.split(":", 1)
                     self.historique.insert("end", f"{num.strip()}: ", "num")
                     self.historique.insert("end", f"{rep.strip()}\n", "rep")
-                elif ligne.strip():
+                else:
                     self.historique.insert("end", f"{ligne}\n", "rep")
             self.historique.see(debut_bloc)
         else:
             self.historique.insert("end", f"#{idx}  ", "num")
-            self.historique.insert("end", f"{reponse}\n", "rep")
+            self.historique.insert("end", f"{reponse}", "rep")
+            self.historique.insert("end", f"  ({duree:.2f}s)\n", "num")
             self.historique.see("end")
         self.historique.configure(state="disabled")
 

@@ -382,11 +382,13 @@ def interroger_agy(question: str, model: str = MODEL, effort: str | None = None)
 
 def traiter_question(question: str, model: str) -> None:
     print("...", end="", flush=True)
+    debut = time.monotonic()
     reponse = interroger_agy(question, model=model)
+    duree = time.monotonic() - debut
     if "\n" in reponse:
-        print(f"\r{reponse}")
+        print(f"\r{reponse}\n({duree:.2f}s)")
     else:
-        print(f"\r> {reponse}")
+        print(f"\r> {reponse}  ({duree:.2f}s)")
 
 
 def boucle_auto(
