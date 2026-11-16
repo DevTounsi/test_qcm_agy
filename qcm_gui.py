@@ -329,9 +329,9 @@ class QcmApp:
         return True
 
     def analyser_maintenant(self) -> None:
+        self._traiter_presse_papiers_courant()
         if self.seq_fn:
             self.dernier_seq = self.seq_fn()
-        self._traiter_presse_papiers_courant()
 
     def _verifier_presse_papiers(self) -> None:
         if self.stop_event.is_set():
@@ -341,7 +341,7 @@ class QcmApp:
                 seq = self.seq_fn()
                 if seq != self.dernier_seq:
                     if self._traiter_presse_papiers_courant():
-                        self.dernier_seq = seq
+                        self.dernier_seq = self.seq_fn()
             else:
                 actuel = self._lire_texte_securise()
                 if actuel is not None:

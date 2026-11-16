@@ -103,6 +103,8 @@ _user32.OpenClipboard.argtypes = [wintypes.HWND]
 _user32.OpenClipboard.restype = wintypes.BOOL
 _user32.CloseClipboard.argtypes = []
 _user32.CloseClipboard.restype = wintypes.BOOL
+_user32.EmptyClipboard.argtypes = []
+_user32.EmptyClipboard.restype = wintypes.BOOL
 _user32.IsClipboardFormatAvailable.argtypes = [wintypes.UINT]
 _user32.IsClipboardFormatAvailable.restype = wintypes.BOOL
 _user32.GetClipboardData.argtypes = [wintypes.UINT]
@@ -141,8 +143,18 @@ def lire_presse_papiers() -> str | None:
         _user32.CloseClipboard()
 
 
-def lire_image_presse_papiers() -> str | None:
-    """Sauvegarde l'image du presse-papiers en PNG temporaire et retourne son chemin."""
+def vider_presse_papiers() -> bool:
+    """Vide le presse-papiers Windows."""
+    if not _user32.OpenClipboard(None):
+        return False
+    try:
+        return bool(_user32.EmptyClipboard())
+    finally:
+        _user32.CloseClipboard()
+
+
+def lire_image_presse_papiers(vider_apres: bool = True) -> str | None:
+    """Sauvegarde l'image du presse-papiers en PNG temporaire, puis vide le presse-papiers."""
     if not _user32.IsClipboardFormatAvailable(_CF_DIB):
         return None
     try:
@@ -160,6 +172,8 @@ def lire_image_presse_papiers() -> str | None:
     dossier.mkdir(parents=True, exist_ok=True)
     chemin = dossier / f"clip_{time.time_ns()}.png"
     img.save(chemin, format="PNG")
+    if vider_apres:
+        vider_presse_papiers()
     return str(chemin)
 
 
