@@ -1,0 +1,3 @@
+# L'exécution directe utilise uniquement la bibliothèque standard Python (3.11+).
+# Dépendance optionnelle uniquement pour générer l'exécutable Windows (.exe) :
+pyinstaller>=6.0
