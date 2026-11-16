@@ -6,3 +6,5 @@ dist/
 *.exe
 *.log
 .pytest_cache/
+src-tauri/target/
+src-tauri/gen/

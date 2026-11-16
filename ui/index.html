@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>QCM</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <header class="titlebar" data-tauri-drag-region>
+        <div class="titlebar-left" data-tauri-drag-region>
+          <div class="traffic-lights">
+            <button id="btn-close" class="tl tl-close" title="Fermer" aria-label="Fermer"></button>
+            <button id="btn-min" class="tl tl-min" title="Réduire" aria-label="Réduire"></button>
+          </div>
+          <div class="status-pill" data-tauri-drag-region>
+            <span id="status-dot" class="dot ready"></span>
+            <span id="status-text" class="status-text">Prêt</span>
+          </div>
+        </div>
+
+        <div class="toolbar">
+          <button id="btn-top" class="pill-btn active" title="Toujours au premier plan">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M9.8 2.2a1 1 0 0 1 1.4 0l2.6 2.6a1 1 0 0 1-.4 1.66l-2.38.79-.95 2.38a1 1 0 0 1-1.64.34L6.8 8.34 3.5 11.64l-.86.36.36-.86 3.3-3.3-1.63-1.63a1 1 0 0 1 .34-1.64l2.38-.95.79-2.38a1 1 0 0 1 .62-.64z"/></svg>
+            <span>Top</span>
+          </button>
+          <button id="btn-screen" class="pill-btn" title="Capturer tout l'écran (F9)">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3A1.5 1.5 0 0 0 1 4.5v7A1.5 1.5 0 0 0 2.5 13h11a1.5 1.5 0 0 0 1.5-1.5v-7A1.5 1.5 0 0 0 13.5 3h-11zm5.5 2.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5z"/></svg>
+            <span>Écran</span>
+          </button>
+          <button id="btn-read" class="pill-btn" title="Lire le presse-papiers (F5)">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 2A1.5 1.5 0 0 0 4 3.5v9A1.5 1.5 0 0 0 5.5 14h6a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 11.5 2h-6zm1 2h4a.5.5 0 0 1 0 1h-4a.5.5 0 0 1 0-1zm0 2.5h4a.5.5 0 0 1 0 1h-4a.5.5 0 0 1 0-1z"/></svg>
+            <span>Lire</span>
+          </button>
+          <button id="btn-pause" class="pill-btn" title="Mettre en pause / Reprendre">
+            <svg id="icon-pause" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 3h2a.5.5 0 0 1 .5.5v9a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1-.5-.5v-9a.5.5 0 0 1 .5-.5zm5 0h2a.5.5 0 0 1 .5.5v9a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1-.5-.5v-9a.5.5 0 0 1 .5-.5z"/></svg>
+          </button>
+          <button id="btn-clear" class="pill-btn" title="Vider l'historique">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 2.5A1.5 1.5 0 0 1 7 1h2a1.5 1.5 0 0 1 1.5 1.5H13a.5.5 0 0 1 0 1h-.6l-.7 9.2A1.5 1.5 0 0 1 10.2 14H5.8a1.5 1.5 0 0 1-1.5-1.3L3.6 3.5H3a.5.5 0 0 1 0-1h2.5z"/></svg>
+          </button>
+          <button id="btn-account" class="pill-btn" title="Connexion Google (agy)">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm-5 5.5c0-2.2 2.2-3.5 5-3.5s5 1.3 5 3.5a.5.5 0 0 1-.5.5h-9a.5.5 0 0 1-.5-.5z"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <section class="controls-bar">
+        <label class="select-wrap model-wrap" title="Modèle IA">
+          <span class="select-label">Modèle</span>
+          <select id="select-model" class="apple-select"></select>
+        </label>
+        <label class="select-wrap effort-wrap" title="Niveau de réflexion">
+          <span class="select-label">Effort</span>
+          <select id="select-effort" class="apple-select"></select>
+        </label>
+      </section>
+
+      <main class="answer-card" id="answer-card">
+        <div id="answer-main" class="answer-main placeholder">
+          En attente d'un Ctrl+C ou Win+Shift+S…
+        </div>
+        <div id="answer-meta" class="answer-meta"></div>
+      </main>
+
+      <section id="history" class="history" aria-label="Historique"></section>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
