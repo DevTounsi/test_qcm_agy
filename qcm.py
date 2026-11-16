@@ -86,7 +86,7 @@ SYSTEM_MULTI = (
 
 SYSTEM_IMAGE = (
     "Tu es un moteur QCM silencieux. Utilise uniquement ton outil de lecture pour lire le fichier image indiqué, "
-    "puis n'explique rien.\n"
+    "repère la ou les questions visibles (ignore les menus/barres autour), puis n'explique rien.\n"
     "- S'il y a UNE seule question : si les choix ont des lettres (A/B/C/D, a/b/c/d), "
     "réponds UNIQUEMENT par la lettre majuscule ; sinon, réponds UNIQUEMENT par la phrase exacte de la bonne réponse.\n"
     "- S'il y a PLUSIEURS questions numérotées, réponds sur des lignes au format exact `NUMERO: REPONSE`.\n"
@@ -153,6 +153,15 @@ def vider_presse_papiers() -> bool:
         _user32.CloseClipboard()
 
 
+def _sauvegarder_image_temp(img, prefixe: str = "clip") -> str:
+    """Enregistre une image PIL en PNG temporaire et retourne son chemin."""
+    dossier = Path(tempfile.gettempdir()) / "qcm_clip_imgs"
+    dossier.mkdir(parents=True, exist_ok=True)
+    chemin = dossier / f"{prefixe}_{time.time_ns()}.png"
+    img.save(chemin, format="PNG")
+    return str(chemin)
+
+
 def lire_image_presse_papiers(vider_apres: bool = True) -> str | None:
     """Sauvegarde l'image du presse-papiers en PNG temporaire, puis vide le presse-papiers."""
     if not _user32.IsClipboardFormatAvailable(_CF_DIB):
@@ -168,13 +177,26 @@ def lire_image_presse_papiers(vider_apres: bool = True) -> str | None:
     if img is None or not hasattr(img, "save"):
         return None
 
-    dossier = Path(tempfile.gettempdir()) / "qcm_clip_imgs"
-    dossier.mkdir(parents=True, exist_ok=True)
-    chemin = dossier / f"clip_{time.time_ns()}.png"
-    img.save(chemin, format="PNG")
+    chemin = _sauvegarder_image_temp(img, prefixe="clip")
     if vider_apres:
         vider_presse_papiers()
-    return str(chemin)
+    return chemin
+
+
+def capturer_ecran() -> str | None:
+    """Capture tout l'écran en PNG temporaire et retourne son chemin (ou None si impossible)."""
+    try:
+        from PIL import ImageGrab
+    except ImportError:
+        return None
+    try:
+        img = ImageGrab.grab(all_screens=True)
+    except OSError:
+        try:
+            img = ImageGrab.grab()
+        except OSError:
+            return None
+    return _sauvegarder_image_temp(img, prefixe="screen")
 
 
 def detecter_lettres(question: str) -> bool:

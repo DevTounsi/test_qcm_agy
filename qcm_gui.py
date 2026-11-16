@@ -31,6 +31,7 @@ class QcmApp:
         lire_fn=None,
         seq_fn=None,
         lire_image_fn=None,
+        capturer_fn=None,
     ) -> None:
         self.root = root
         cfg = qcm.charger_config()
@@ -47,6 +48,8 @@ class QcmApp:
         self.lire_image_fn = lire_image_fn if lire_image_fn is not None else (
             qcm.lire_image_presse_papiers if self._utilise_clipboard_systeme else (lambda: None)
         )
+        self.capturer_fn = capturer_fn or qcm.capturer_ecran
+        self._capture_en_cours = False
         self.seq_fn = seq_fn if seq_fn is not None else (
             qcm.numero_sequence_presse_papiers if self._utilise_clipboard_systeme else None
         )
@@ -74,8 +77,8 @@ class QcmApp:
 
     def _configurer_fenetre(self) -> None:
         self.root.title("QCM")
-        self.root.geometry("410x285")
-        self.root.minsize(330, 190)
+        self.root.geometry("455x285")
+        self.root.minsize(370, 190)
         self.root.configure(bg=BG)
         self.root.attributes("-topmost", True)
         self.root.protocol("WM_DELETE_WINDOW", self.fermer)
@@ -142,6 +145,9 @@ class QcmApp:
         self.btn_lire = self._creer_bouton(header, "Lire", self.analyser_maintenant)
         self.btn_lire.pack(side="right", padx=(4, 0))
 
+        self.btn_ecran = self._creer_bouton(header, "Écran", self.capturer_tout_ecran)
+        self.btn_ecran.pack(side="right", padx=(4, 0))
+
         self.btn_top = self._creer_bouton(header, "Top", self.basculer_devant, actif=True)
         self.btn_top.pack(side="right")
 
@@ -177,6 +183,7 @@ class QcmApp:
         self.combo_effort.bind("<<ComboboxSelected>>", self._sur_changement_effort)
 
         self.root.bind("<F5>", lambda _e: self.analyser_maintenant())
+        self.root.bind("<F9>", lambda _e: self.capturer_tout_ecran())
         self.root.bind("<Return>", lambda _e: self.analyser_maintenant())
 
         # Carte réponse principale
@@ -332,6 +339,33 @@ class QcmApp:
         self._traiter_presse_papiers_courant()
         if self.seq_fn:
             self.dernier_seq = self.seq_fn()
+
+    def capturer_tout_ecran(self) -> None:
+        """Masque la fenêtre hors-top, capture tout l'écran, puis réaffiche la fenêtre."""
+        if self._capture_en_cours or self.stop_event.is_set():
+            return
+        self._capture_en_cours = True
+        self.root.attributes("-topmost", False)
+        self.root.withdraw()
+        self.root.update_idletasks()
+        self.root.after(200, self._executer_capture_ecran)
+
+    def _executer_capture_ecran(self) -> None:
+        img_path: str | None = None
+        try:
+            img_path = self.capturer_fn()
+        finally:
+            self._capture_en_cours = False
+            if not self.stop_event.is_set():
+                self.root.deiconify()
+                self.root.attributes("-topmost", self.toujours_devant)
+                self.root.update_idletasks()
+
+        if img_path:
+            self._enfiler_image(img_path)
+        elif not self.stop_event.is_set():
+            self.reponse_lbl.configure(fg=RED, font=self.font_petit)
+            self.reponse_var.set("[erreur] Capture d'écran impossible.")
 
     def _verifier_presse_papiers(self) -> None:
         if self.stop_event.is_set():

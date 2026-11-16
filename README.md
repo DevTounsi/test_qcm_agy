@@ -27,6 +27,7 @@ Mini fenêtre flottante discrète pour Windows qui surveille le presse-papiers e
 3. Choisis ton **Modèle** et ton **Effort** (ex. `Gemini 4 Hydrogen` + `Medium`, ou `Gemini 3.8 Flash` + `Low`).
 4. Copie (`Ctrl+C`) une question ou fais une capture (`Win + Shift + S`) : la réponse apparaît automatiquement.
    - **`Top`** : garde la fenêtre au-dessus des autres.
+   - **`Écran`** (`F9`) : masque brièvement la fenêtre, capture tout l'écran et remet la fenêtre au premier plan.
    - **`Lire`** (`Entrée` / `F5`) : analyse ce qui est déjà dans le presse-papiers.
    - **`Pause`** / **`Vider`** / **`Compte`** : mettre en pause, effacer l'historique, ou ouvrir la connexion Google `agy`.
 
